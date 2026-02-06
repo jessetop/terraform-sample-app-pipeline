@@ -1,0 +1,22 @@
+# terraform.tfvars.example - Copy to terraform.tfvars and customize
+
+# ESXi Connection
+esxi_host            = "192.168.1.100"  # Your ESXi host IP
+esxi_username        = "root"
+esxi_password        = "your-esxi-password"
+allow_unverified_ssl = true
+
+# Datastore (leave empty for default "datastore1")
+datastore_name = ""
+
+# VM to migrate
+vm_name = "my-linux-vm"  # Name of the VM in ESXi
+
+# AWS MGN Configuration (get these from 01-aws-mgn-setup outputs)
+aws_region                  = "us-east-1"
+mgn_agent_access_key_id     = ""  # Run: cd ../01-aws-mgn-setup && terraform output -raw mgn_agent_access_key_id
+mgn_agent_secret_access_key = ""  # Run: cd ../01-aws-mgn-setup && terraform output -raw mgn_agent_secret_access_key
+
+# SSH access to source VM (for copying install script)
+vm_ssh_user             = "root"
+vm_ssh_private_key_path = "~/.ssh/id_rsa"  # Optional

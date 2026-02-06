@@ -1,0 +1,24 @@
+# terraform.tfvars.example - Copy to terraform.tfvars and customize
+
+aws_region   = "us-east-1"
+project_name = "esxi-migration"
+
+# S3 bucket (leave empty for auto-generated name)
+import_bucket_name = ""
+
+# ESXi information (for export scripts)
+esxi_host      = "192.168.1.100"
+esxi_username  = "root"
+esxi_password  = "your-esxi-password"
+vm_name        = "my-linux-vm"
+datastore_name = "datastore1"
+
+# Import configuration
+import_description = "Imported from ESXi - My Linux VM"
+import_license_type = "AWS"  # "AWS" or "BYOL"
+
+# Optional: Launch instance after import
+launch_instance = false
+instance_type   = "t3.medium"
+subnet_id       = ""           # Required if launch_instance = true
+key_pair_name   = ""           # Required if launch_instance = true
