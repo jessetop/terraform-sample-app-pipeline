@@ -12,9 +12,7 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Sensitive files
-*.tfvars
-!*.tfvars.org
+# Sensitive files (tfvars kept for student templates)
 .env
 *.pem
 credentials*
