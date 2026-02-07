@@ -133,7 +133,7 @@ Replace `studentXX` with your assigned student ID throughout this lab.
 
 ---
 
-## Part A: Resource Discovery & Complete Inventory (15 min)
+## Part A: Resource Discovery & Configuration (15 min)
 
 Before writing a single line of Terraform, you need to know exactly what exists. In a real engagement, documentation may be missing or wrong. The AWS CLI is your source of truth.
 
@@ -145,7 +145,7 @@ cd lab2-import
 
 ### Step 2: Review the Lab Files
 
-The lab directory includes pre-created configuration files. Review them:
+The lab directory includes pre-created configuration files:
 
 | File | Purpose |
 |------|---------|
@@ -156,93 +156,40 @@ The lab directory includes pre-created configuration files. Review them:
 
 > **Note:** The import blocks in `imports.tf` use variables instead of hardcoded IDs. This means you only need to update `terraform.tfvars` with your discovered resource IDs.
 
-### Step 3: Run Discovery Commands
+### Step 3: Get Resource IDs
 
-Run the following discovery commands, replacing `studentXX` with your student ID. The `terraform.tfvars` file includes the AWS CLI commands as comments for easy reference.
-
-**Discover Network Resources:**
+**Real-World Approach:** In a real engagement with legacy console-created infrastructure, you would discover each resource by tag using AWS CLI commands. These could be scripted, but you'd run queries like:
 
 ```bash
-# VPC
+# Example: Discover VPC by tag
 aws ec2 describe-vpcs --filters "Name=tag:Name,Values=*legacy-vpc*" \
   --query 'Vpcs[].VpcId' --output text
 
-# Subnets (note the Public column to identify public vs private)
+# Example: Discover subnets by tag
 aws ec2 describe-subnets --filters "Name=tag:Name,Values=*legacy*" \
-  --query 'Subnets[].[Tags[?Key==`Name`].Value|[0],SubnetId,MapPublicIpOnLaunch]' --output table
-
-# Internet Gateway
-aws ec2 describe-internet-gateways --filters "Name=tag:Name,Values=*legacy*" \
-  --query 'InternetGateways[].InternetGatewayId' --output text
-
-# Elastic IP (allocation ID, not the IP address)
-aws ec2 describe-addresses --filters "Name=tag:Name,Values=*legacy*" \
-  --query 'Addresses[].AllocationId' --output text
-
-# NAT Gateway
-aws ec2 describe-nat-gateways --filter "Name=tag:Name,Values=*legacy*" \
-  --query 'NatGateways[].NatGatewayId' --output text
-
-# Route Tables
-aws ec2 describe-route-tables --filters "Name=tag:Name,Values=*legacy*" \
-  --query 'RouteTables[].[Tags[?Key==`Name`].Value|[0],RouteTableId]' --output table
+  --query 'Subnets[].[Tags[?Key==`Name`].Value|[0],SubnetId]' --output table
 ```
 
-**Discover Security Resources:**
+The `terraform.tfvars` file includes all the AWS CLI discovery commands as comments for reference.
+
+**Lab Shortcut:** Since we deployed the legacy infrastructure using Terraform in `lab2-legacy-setup`, all the resource IDs are available as outputs. Simply run:
 
 ```bash
-aws ec2 describe-security-groups --filters "Name=tag:Name,Values=*legacy*" \
-  --query 'SecurityGroups[].[GroupName,GroupId]' --output table
+cd ../lab2-legacy-setup
+terraform output
 ```
 
-**Discover Application Resources:**
+This displays all resource IDs in the same order as `terraform.tfvars`. Copy the values into `lab2-import/terraform.tfvars`.
 
-```bash
-# ALB
-aws elbv2 describe-load-balancers \
-  --query 'LoadBalancers[?contains(LoadBalancerName,`legacy`)].LoadBalancerArn' --output text
+### Step 4: Update Configuration Files
 
-# Target Group
-aws elbv2 describe-target-groups \
-  --query 'TargetGroups[?contains(TargetGroupName,`legacy`)].TargetGroupArn' --output text
+1. Edit `lab2-import/terraform.tfvars` and paste the resource IDs from the terraform output.
 
-# Listener (use your ALB ARN from above)
-aws elbv2 describe-listeners --load-balancer-arn <ALB_ARN> \
-  --query 'Listeners[].ListenerArn' --output text
-```
+2. Edit `lab2-import/providers.tf` and update the backend bucket name with your value from Lab 1.
 
-**Discover Compute Resources:**
+> **Important:** For subnets, public subnets have `MapPublicIpOnLaunch = true`, private subnets have `false`.
 
-```bash
-# Launch Template
-aws ec2 describe-launch-templates --filters "Name=tag:Name,Values=*legacy*" \
-  --query 'LaunchTemplates[].LaunchTemplateId' --output text
-
-# Auto Scaling Group (uses name, not ID)
-aws autoscaling describe-auto-scaling-groups \
-  --query 'AutoScalingGroups[?contains(AutoScalingGroupName,`legacy`)].AutoScalingGroupName' --output text
-```
-
-### Step 4: Update terraform.tfvars
-
-Edit `terraform.tfvars` and paste the discovered resource IDs. The file has placeholder values and comments showing which AWS CLI command to use for each value.
-
-> **Important:** For subnets, use the `MapPublicIpOnLaunch` column to identify which subnets are public (true) vs private (false).
-
-### Step 5: Update Backend Configuration
-
-Edit `providers.tf` and replace the bucket name with your actual value from Lab 1:
-
-```bash
-# Get your bucket name from Lab 1
-cd ../lab1-state-infra
-terraform output state_bucket_name
-cd ../lab2-import
-```
-
-Update the `bucket` value in the backend block.
-
-### Step 6: Verify the Application is Running
+### Step 5: Verify the Application is Running
 
 Before touching anything, confirm the application is live:
 
@@ -266,7 +213,7 @@ The application is live. It must remain live throughout this entire lab.
 
 ## Part B: Initialize and Generate Configuration (15 min)
 
-### Step 7: Initialize Terraform
+### Step 6: Initialize Terraform
 
 ```bash
 terraform init
@@ -274,7 +221,7 @@ terraform init
 
 Terraform connects to the S3 backend created in Lab 1. S3 native locking (`use_lockfile = true`) prevents concurrent operations.
 
-### Step 8: Generate Configuration
+### Step 7: Generate Configuration
 
 Run config generation for all resources at once:
 
@@ -295,7 +242,7 @@ Plan: 21 to import, 0 to add, 0 to change, 0 to destroy.
 
 Terraform creates `generated.tf` containing auto-generated HCL for all 21 resources.
 
-### Step 9: Examine Generated Configuration
+### Step 8: Examine Generated Configuration
 
 Open `generated.tf` and review it. The generated code is functional but includes:
 
@@ -312,7 +259,7 @@ Open `generated.tf` and review it. The generated code is functional but includes
 
 You will now clean up the generated configuration. For reference, the `imported/` directory contains example files showing what clean config should look like.
 
-### Step 10: Review Reference Files
+### Step 9: Review Reference Files
 
 The `imported/` directory contains completed configuration files:
 
@@ -330,7 +277,7 @@ ls imported/
 
 > **Important:** Do NOT copy these files directly -- the exercise is to create them yourself using the generated config as your starting point. Use the reference files to understand the target structure.
 
-### Step 11: Create Clean Configuration Files
+### Step 10: Create Clean Configuration Files
 
 Using `generated.tf` as input and the `imported/` files as reference, create clean versions:
 
@@ -399,7 +346,7 @@ output "alb_url" {
 | Empty blocks | Features not in use |
 | Computed outputs (`arn`, `owner_id`) | Read-only |
 
-### Step 12: Delete Generated File
+### Step 11: Delete Generated File
 
 After creating clean config files:
 
@@ -411,7 +358,7 @@ rm generated.tf
 
 ## Part D: Import All Resources (10 min)
 
-### Step 13: Validate the Plan
+### Step 12: Validate the Plan
 
 ```bash
 terraform plan
@@ -433,7 +380,7 @@ If you see planned **changes** (not just imports), common causes include:
 
 Iterate: edit your `.tf` files, re-run `terraform plan`, repeat until the plan shows only imports.
 
-### Step 14: Apply All Imports
+### Step 13: Apply All Imports
 
 Once the plan is clean:
 
@@ -454,7 +401,7 @@ aws_autoscaling_group.legacy: Import complete [id=studentXX-legacy-asg]
 Apply complete! Resources: 21 imported, 0 added, 0 changed, 0 destroyed.
 ```
 
-### Step 15: Verify Clean State
+### Step 14: Verify Clean State
 
 Run an immediate follow-up plan:
 
@@ -475,7 +422,7 @@ terraform state list
 
 You should see 21 resources.
 
-### Step 16: Verify Application Health
+### Step 15: Verify Application Health
 
 Confirm zero downtime:
 
@@ -491,14 +438,14 @@ The application continued serving traffic throughout the entire import process.
 
 The import blocks have served their purpose. They only execute once -- on subsequent plans and applies, Terraform uses the state file to track these resources.
 
-### Step 17: Move Import Blocks
+### Step 16: Move Import Blocks
 
 ```bash
 mkdir -p completed_imports
 mv imports.tf completed_imports/
 ```
 
-### Step 18: Final Verification
+### Step 17: Final Verification
 
 ```bash
 terraform plan
