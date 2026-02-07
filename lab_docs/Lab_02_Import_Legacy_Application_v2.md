@@ -156,40 +156,46 @@ The lab directory includes pre-created configuration files:
 
 > **Note:** The import blocks in `imports.tf` use variables instead of hardcoded IDs. This means you only need to update `terraform.tfvars` with your discovered resource IDs.
 
-### Step 3: Get Resource IDs
+### Step 3: Get Resource IDs from Legacy Setup
 
-**Real-World Approach:** In a real engagement with legacy console-created infrastructure, you would discover each resource by tag using AWS CLI commands. These could be scripted, but you'd run queries like:
-
-```bash
-# Example: Discover VPC by tag
-aws ec2 describe-vpcs --filters "Name=tag:Name,Values=*legacy-vpc*" \
-  --query 'Vpcs[].VpcId' --output text
-
-# Example: Discover subnets by tag
-aws ec2 describe-subnets --filters "Name=tag:Name,Values=*legacy*" \
-  --query 'Subnets[].[Tags[?Key==`Name`].Value|[0],SubnetId]' --output table
-```
-
-The `terraform.tfvars` file includes all the AWS CLI discovery commands as comments for reference.
-
-**Lab Shortcut:** Since we deployed the legacy infrastructure using Terraform in `lab2-legacy-setup`, all the resource IDs are available as outputs. Simply run:
+Since we deployed the legacy infrastructure using Terraform in `lab2-legacy-setup`, all the resource IDs are available as outputs:
 
 ```bash
 cd ../lab2-legacy-setup
 terraform output
 ```
 
-This displays all resource IDs in the same order as `terraform.tfvars`. Copy the values into `lab2-import/terraform.tfvars`.
+The output displays all 17 resource IDs needed for import. The output variable names match the variable names in `terraform.tfvars`.
 
-### Step 4: Update Configuration Files
+> **Real-World Note:** In a real engagement with console-created infrastructure, you would discover each resource using AWS CLI commands. The `terraform.tfvars` file includes example discovery commands as comments for reference.
 
-1. Edit `lab2-import/terraform.tfvars` and paste the resource IDs from the terraform output.
+### Step 4: Update terraform.tfvars
 
-2. Edit `lab2-import/providers.tf` and update the backend bucket name with your value from Lab 1.
+1. Open `lab2-import/terraform.tfvars` in your editor
+2. Copy each value from the `terraform output` into the corresponding variable
+3. Update `student_id` and `state_bucket_name` with your values from Lab 1
 
-> **Important:** For subnets, public subnets have `MapPublicIpOnLaunch = true`, private subnets have `false`.
+Example of what you're replacing:
+```hcl
+# Before
+vpc_id = "vpc-REPLACE_ME"
 
-### Step 5: Verify the Application is Running
+# After
+vpc_id = "vpc-0abc123def456"
+```
+
+### Step 5: Update providers.tf
+
+Edit `lab2-import/providers.tf` and update the backend bucket name:
+
+```hcl
+backend "s3" {
+  bucket         = "student01-terraform-state-abc123"  # Your bucket from Lab 1
+  # ...
+}
+```
+
+### Step 6: Verify the Application is Running
 
 Before touching anything, confirm the application is live:
 
@@ -213,7 +219,7 @@ The application is live. It must remain live throughout this entire lab.
 
 ## Part B: Initialize and Generate Configuration (15 min)
 
-### Step 6: Initialize Terraform
+### Step 7: Initialize Terraform
 
 ```bash
 terraform init
@@ -221,7 +227,7 @@ terraform init
 
 Terraform connects to the S3 backend created in Lab 1. S3 native locking (`use_lockfile = true`) prevents concurrent operations.
 
-### Step 7: Generate Configuration
+### Step 8: Generate Configuration
 
 Run config generation for all resources at once:
 
@@ -242,7 +248,7 @@ Plan: 21 to import, 0 to add, 0 to change, 0 to destroy.
 
 Terraform creates `generated.tf` containing auto-generated HCL for all 21 resources.
 
-### Step 8: Examine Generated Configuration
+### Step 9: Examine Generated Configuration
 
 Open `generated.tf` and review it. The generated code is functional but includes:
 
@@ -259,7 +265,7 @@ Open `generated.tf` and review it. The generated code is functional but includes
 
 You will now clean up the generated configuration. For reference, the `imported/` directory contains example files showing what clean config should look like.
 
-### Step 9: Review Reference Files
+### Step 10: Review Reference Files
 
 The `imported/` directory contains completed configuration files:
 
@@ -277,7 +283,7 @@ ls imported/
 
 > **Important:** Do NOT copy these files directly -- the exercise is to create them yourself using the generated config as your starting point. Use the reference files to understand the target structure.
 
-### Step 10: Create Clean Configuration Files
+### Step 11: Create Clean Configuration Files
 
 Using `generated.tf` as input and the `imported/` files as reference, create clean versions:
 
@@ -346,7 +352,7 @@ output "alb_url" {
 | Empty blocks | Features not in use |
 | Computed outputs (`arn`, `owner_id`) | Read-only |
 
-### Step 11: Delete Generated File
+### Step 12: Delete Generated File
 
 After creating clean config files:
 
@@ -358,7 +364,7 @@ rm generated.tf
 
 ## Part D: Import All Resources (10 min)
 
-### Step 12: Validate the Plan
+### Step 13: Validate the Plan
 
 ```bash
 terraform plan
@@ -380,7 +386,7 @@ If you see planned **changes** (not just imports), common causes include:
 
 Iterate: edit your `.tf` files, re-run `terraform plan`, repeat until the plan shows only imports.
 
-### Step 13: Apply All Imports
+### Step 14: Apply All Imports
 
 Once the plan is clean:
 
@@ -401,7 +407,7 @@ aws_autoscaling_group.legacy: Import complete [id=studentXX-legacy-asg]
 Apply complete! Resources: 21 imported, 0 added, 0 changed, 0 destroyed.
 ```
 
-### Step 14: Verify Clean State
+### Step 15: Verify Clean State
 
 Run an immediate follow-up plan:
 
@@ -422,7 +428,7 @@ terraform state list
 
 You should see 21 resources.
 
-### Step 15: Verify Application Health
+### Step 16: Verify Application Health
 
 Confirm zero downtime:
 
@@ -438,14 +444,14 @@ The application continued serving traffic throughout the entire import process.
 
 The import blocks have served their purpose. They only execute once -- on subsequent plans and applies, Terraform uses the state file to track these resources.
 
-### Step 16: Move Import Blocks
+### Step 17: Move Import Blocks
 
 ```bash
 mkdir -p completed_imports
 mv imports.tf completed_imports/
 ```
 
-### Step 17: Final Verification
+### Step 18: Final Verification
 
 ```bash
 terraform plan
