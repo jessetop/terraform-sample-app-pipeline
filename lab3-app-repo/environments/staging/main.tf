@@ -10,7 +10,7 @@ terraform {
     key          = "pipeline/staging/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true
-    use_lockfile = true  # Uses S3 native locking instead of DynamoDB
+    use_lockfile = true # Uses S3 native locking instead of DynamoDB
   }
 
   required_providers {
@@ -34,18 +34,13 @@ provider "aws" {
 }
 
 module "app" {
-  source         = "../../modules/app"
-  environment    = "staging"
-  student_id     = "studentXX"
+  source = "../../modules/app"
+  environment = "staging"
+  student_id     =    "studentXX"
   instance_count = 2
 }
 
 output "config_parameter" {
   description = "Staging config parameter name"
   value       = module.app.config_parameter_name
-}
-
-output "config_value" {
-  description = "Staging config parameter value"
-  value       = module.app.config_parameter_value
 }

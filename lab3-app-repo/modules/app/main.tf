@@ -37,8 +37,3 @@ output "config_parameter_name" {
   description = "Name of the application config parameter"
   value       = aws_ssm_parameter.app_config.name
 }
-
-output "config_parameter_value" {
-  description = "Value of the application config parameter"
-  value       = aws_ssm_parameter.app_config.value
-}

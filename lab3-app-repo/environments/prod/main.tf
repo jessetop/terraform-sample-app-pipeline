@@ -10,7 +10,7 @@ terraform {
     key          = "pipeline/prod/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true
-    use_lockfile = true  # Uses S3 native locking instead of DynamoDB
+    use_lockfile = true # Uses S3 native locking instead of DynamoDB
   }
 
   required_providers {
@@ -43,9 +43,4 @@ module "app" {
 output "config_parameter" {
   description = "Production config parameter name"
   value       = module.app.config_parameter_name
-}
-
-output "config_value" {
-  description = "Production config parameter value"
-  value       = module.app.config_parameter_value
 }
