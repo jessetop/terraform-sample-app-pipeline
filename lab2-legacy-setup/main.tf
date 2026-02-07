@@ -1,9 +1,18 @@
-# main.tf - Legacy application infrastructure
+# main.tf - Legacy application infrastructure (simplified)
 # This creates the "legacy" resources that students will import in Lab 2
 #
-# IMPORTANT: After running terraform apply, close this folder and pretend
-# it doesn't exist. Your job in Lab 2 is to reverse-engineer and import
-# these resources as if they were created manually years ago.
+# SIMPLE ARCHITECTURE: Single server, single AZ, no load balancing
+# This represents a hastily-deployed legacy app. After importing to Terraform,
+# students could evolve it to add multi-AZ, load balancing, auto scaling, etc.
+#
+# Resources created (6 total):
+#   1. VPC
+#   2. Public Subnet
+#   3. Internet Gateway
+#   4. Route Table
+#   5. Route Table Association
+#   6. Security Group
+#   7. EC2 Instance
 
 # -----------------------------------------------------------------------------
 # Data Sources
@@ -43,48 +52,17 @@ resource "aws_vpc" "legacy" {
 }
 
 # -----------------------------------------------------------------------------
-# Subnets
+# Public Subnet (single AZ)
 # -----------------------------------------------------------------------------
 
-resource "aws_subnet" "public_a" {
+resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.legacy.id
-  cidr_block              = cidrsubnet(var.vpc_cidr, 8, 1)  # 10.0.1.0/24
+  cidr_block              = cidrsubnet(var.vpc_cidr, 8, 1) # 10.0.1.0/24
   availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "${var.student_id}-legacy-public-a"
-  }
-}
-
-resource "aws_subnet" "public_b" {
-  vpc_id                  = aws_vpc.legacy.id
-  cidr_block              = cidrsubnet(var.vpc_cidr, 8, 2)  # 10.0.2.0/24
-  availability_zone       = data.aws_availability_zones.available.names[1]
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name = "${var.student_id}-legacy-public-b"
-  }
-}
-
-resource "aws_subnet" "private_a" {
-  vpc_id            = aws_vpc.legacy.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 8, 10)  # 10.0.10.0/24
-  availability_zone = data.aws_availability_zones.available.names[0]
-
-  tags = {
-    Name = "${var.student_id}-legacy-private-a"
-  }
-}
-
-resource "aws_subnet" "private_b" {
-  vpc_id            = aws_vpc.legacy.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 8, 20)  # 10.0.20.0/24
-  availability_zone = data.aws_availability_zones.available.names[1]
-
-  tags = {
-    Name = "${var.student_id}-legacy-private-b"
+    Name = "${var.student_id}-legacy-public"
   }
 }
 
@@ -101,30 +79,7 @@ resource "aws_internet_gateway" "legacy" {
 }
 
 # -----------------------------------------------------------------------------
-# NAT Gateway
-# -----------------------------------------------------------------------------
-
-resource "aws_eip" "nat" {
-  domain = "vpc"
-
-  tags = {
-    Name = "${var.student_id}-legacy-nat-eip"
-  }
-}
-
-resource "aws_nat_gateway" "legacy" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public_a.id
-
-  tags = {
-    Name = "${var.student_id}-legacy-nat"
-  }
-
-  depends_on = [aws_internet_gateway.legacy]
-}
-
-# -----------------------------------------------------------------------------
-# Route Tables
+# Route Table
 # -----------------------------------------------------------------------------
 
 resource "aws_route_table" "public" {
@@ -136,56 +91,36 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name = "${var.student_id}-legacy-public-rt"
+    Name = "${var.student_id}-legacy-rt"
   }
 }
 
-resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.legacy.id
-
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.legacy.id
-  }
-
-  tags = {
-    Name = "${var.student_id}-legacy-private-rt"
-  }
-}
-
-resource "aws_route_table_association" "public_a" {
-  subnet_id      = aws_subnet.public_a.id
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public.id
 }
 
-resource "aws_route_table_association" "public_b" {
-  subnet_id      = aws_subnet.public_b.id
-  route_table_id = aws_route_table.public.id
-}
-
-resource "aws_route_table_association" "private_a" {
-  subnet_id      = aws_subnet.private_a.id
-  route_table_id = aws_route_table.private.id
-}
-
-resource "aws_route_table_association" "private_b" {
-  subnet_id      = aws_subnet.private_b.id
-  route_table_id = aws_route_table.private.id
-}
-
 # -----------------------------------------------------------------------------
-# Security Groups
+# Security Group
 # -----------------------------------------------------------------------------
 
-resource "aws_security_group" "alb" {
-  name        = "${var.student_id}-legacy-alb-sg"
-  description = "Security group for legacy ALB"
+resource "aws_security_group" "legacy" {
+  name        = "${var.student_id}-legacy-sg"
+  description = "Security group for legacy web server"
   vpc_id      = aws_vpc.legacy.id
 
   ingress {
     description = "HTTP from anywhere"
     from_port   = 80
     to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "SSH from anywhere"
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -199,153 +134,60 @@ resource "aws_security_group" "alb" {
   }
 
   tags = {
-    Name = "${var.student_id}-legacy-alb-sg"
-  }
-}
-
-resource "aws_security_group" "ec2" {
-  name        = "${var.student_id}-legacy-ec2-sg"
-  description = "Security group for legacy EC2 instances"
-  vpc_id      = aws_vpc.legacy.id
-
-  ingress {
-    description     = "HTTP from ALB"
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  egress {
-    description = "All outbound"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "${var.student_id}-legacy-ec2-sg"
+    Name = "${var.student_id}-legacy-sg"
   }
 }
 
 # -----------------------------------------------------------------------------
-# Application Load Balancer
+# EC2 Instance (single server - the "legacy" app)
 # -----------------------------------------------------------------------------
 
-resource "aws_lb" "legacy" {
-  name               = "${var.student_id}-legacy-alb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
-  subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+resource "aws_instance" "legacy" {
+  ami                    = data.aws_ami.amazon_linux_2023.id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.legacy.id]
 
-  tags = {
-    Name = "${var.student_id}-legacy-alb"
-  }
-}
-
-resource "aws_lb_target_group" "legacy" {
-  name     = "${var.student_id}-legacy-tg"
-  port     = 80
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.legacy.id
-
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    interval            = 30
-    matcher             = "200"
-    path                = "/"
-    port                = "traffic-port"
-    protocol            = "HTTP"
-    timeout             = 5
-    unhealthy_threshold = 2
-  }
-
-  tags = {
-    Name = "${var.student_id}-legacy-tg"
-  }
-}
-
-resource "aws_lb_listener" "legacy" {
-  load_balancer_arn = aws_lb.legacy.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.legacy.arn
-  }
-
-  tags = {
-    Name = "${var.student_id}-legacy-listener"
-  }
-}
-
-# -----------------------------------------------------------------------------
-# Launch Template & Auto Scaling Group
-# -----------------------------------------------------------------------------
-
-resource "aws_launch_template" "legacy" {
-  name          = "${var.student_id}-legacy-lt"
-  image_id      = data.aws_ami.amazon_linux_2023.id
-  instance_type = var.instance_type
-
-  network_interfaces {
-    associate_public_ip_address = false
-    security_groups             = [aws_security_group.ec2.id]
-  }
-
-  user_data = base64encode(<<-EOF
+  user_data = <<-EOF
     #!/bin/bash
-    dnf install -y httpd git
+    dnf install -y httpd
     systemctl enable httpd
     systemctl start httpd
 
-    # Clone 2048 game (small repo, fast download)
-    git clone https://github.com/gabrielecirulli/2048.git /tmp/2048
-    cp -r /tmp/2048/* /var/www/html/
-
-    # Add instance info to the page
-    echo "<!-- Instance: $(hostname) | Student: ${var.student_id} | AZ: $(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone) -->" >> /var/www/html/index.html
+    # Create a simple legacy app page
+    cat > /var/www/html/index.html << 'HTML'
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Legacy App - ${var.student_id}</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+            .container { background: white; padding: 30px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            h1 { color: #333; }
+            .info { background: #e7f3ff; padding: 15px; border-radius: 4px; margin: 20px 0; }
+            .warning { background: #fff3cd; padding: 15px; border-radius: 4px; margin: 20px 0; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Legacy Application</h1>
+            <div class="info">
+                <strong>Status:</strong> Running<br>
+                <strong>Student:</strong> ${var.student_id}<br>
+                <strong>Deployed:</strong> Via AWS Console (simulated)
+            </div>
+            <div class="warning">
+                <strong>Warning:</strong> This application has no infrastructure-as-code,
+                no version control, and runs on a single server with no redundancy.
+            </div>
+            <p>Your mission: Import this infrastructure into Terraform management.</p>
+        </div>
+    </body>
+    </html>
+    HTML
   EOF
-  )
-
-  tag_specifications {
-    resource_type = "instance"
-    tags = {
-      Name = "${var.student_id}-legacy-instance"
-    }
-  }
 
   tags = {
-    Name = "${var.student_id}-legacy-lt"
-  }
-}
-
-resource "aws_autoscaling_group" "legacy" {
-  name                = "${var.student_id}-legacy-asg"
-  desired_capacity    = 2
-  max_size            = 4
-  min_size            = 1
-  target_group_arns   = [aws_lb_target_group.legacy.arn]
-  vpc_zone_identifier = [aws_subnet.private_a.id, aws_subnet.private_b.id]
-
-  launch_template {
-    id      = aws_launch_template.legacy.id
-    version = "$Latest"
-  }
-
-  tag {
-    key                 = "Name"
-    value               = "${var.student_id}-legacy-instance"
-    propagate_at_launch = true
-  }
-
-  tag {
-    key                 = "Student"
-    value               = var.student_id
-    propagate_at_launch = true
+    Name = "${var.student_id}-legacy-server"
   }
 }

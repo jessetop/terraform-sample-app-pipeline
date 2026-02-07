@@ -10,11 +10,20 @@ terraform plan -generate-config-out=generated.tf
 
 ## Files
 
-- `data.tf` - AMI data source lookup
-- `network.tf` - VPC, subnets, IGW, NAT gateway, route tables
-- `security.tf` - Security groups for ALB and EC2
-- `alb.tf` - Application Load Balancer, target group, listener
-- `compute.tf` - Launch template and Auto Scaling Group
+- `data.tf` - Availability zones and AMI data source lookup
+- `network.tf` - VPC, subnet, internet gateway, route table
+- `security.tf` - Security group for the web server
+- `compute.tf` - EC2 instance
+
+## Resources (7 total)
+
+1. VPC
+2. Public Subnet
+3. Internet Gateway
+4. Route Table
+5. Route Table Association
+6. Security Group
+7. EC2 Instance
 
 ## Key Points
 
@@ -22,3 +31,14 @@ terraform plan -generate-config-out=generated.tf
 2. AMI uses a data source lookup, not a hardcoded ID
 3. The import blocks in `imports.tf` tell Terraform which existing resources to import
 4. After import, these resources are managed by Terraform in the new state file
+
+## Next Steps After Import
+
+After successfully importing this single-server legacy app, you could evolve it to a production-ready architecture by adding:
+
+- Multiple availability zones
+- Load balancing (ALB)
+- Auto scaling
+- Private subnets with NAT gateway
+
+All without recreating the original imported resources!

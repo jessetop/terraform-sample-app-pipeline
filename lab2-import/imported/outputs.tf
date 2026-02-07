@@ -5,22 +5,22 @@ output "vpc_id" {
   value       = aws_vpc.legacy.id
 }
 
-output "alb_dns_name" {
-  description = "DNS name of the legacy application load balancer"
-  value       = aws_lb.legacy.dns_name
+output "instance_id" {
+  description = "EC2 instance ID"
+  value       = aws_instance.legacy.id
 }
 
-output "alb_url" {
+output "public_ip" {
+  description = "Public IP of the legacy server"
+  value       = aws_instance.legacy.public_ip
+}
+
+output "app_url" {
   description = "Application URL"
-  value       = "http://${aws_lb.legacy.dns_name}"
-}
-
-output "asg_name" {
-  description = "Auto Scaling Group name"
-  value       = aws_autoscaling_group.legacy.name
+  value       = "http://${aws_instance.legacy.public_ip}"
 }
 
 output "managed_resource_count" {
   description = "Total number of resources under Terraform management"
-  value       = "21 resources imported"
+  value       = "7 resources imported"
 }
