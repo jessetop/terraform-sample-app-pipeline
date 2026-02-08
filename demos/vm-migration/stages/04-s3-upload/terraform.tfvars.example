@@ -1,0 +1,4 @@
+# terraform.tfvars.example - Copy to terraform.tfvars and customize
+
+aws_region   = "us-east-1"
+state_bucket = "YOUR-STATE-BUCKET-NAME"

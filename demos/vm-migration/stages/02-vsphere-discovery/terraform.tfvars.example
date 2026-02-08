@@ -1,0 +1,9 @@
+# terraform.tfvars.example - Copy to terraform.tfvars and customize
+
+esxi_host            = "192.168.1.100"
+esxi_username        = "root"
+esxi_password        = "your-esxi-password"
+allow_unverified_ssl = true
+
+vm_name        = "my-linux-vm"
+datastore_name = "datastore1"
