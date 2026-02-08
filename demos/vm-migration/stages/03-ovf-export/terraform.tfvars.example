@@ -1,0 +1,11 @@
+# terraform.tfvars.example - Copy to terraform.tfvars and customize
+
+# Remote state bucket (same bucket used for all stages)
+state_bucket = "YOUR-STATE-BUCKET-NAME"
+
+# ESXi credentials (password not in remote state for security)
+esxi_username = "root"
+esxi_password = "your-esxi-password"
+
+# Local directory to store exported OVA
+export_dir = "./exported"

@@ -1,0 +1,29 @@
+# _backend.tf.example — Template for S3 backend configuration
+#
+# Each stage needs a backend "s3" block in its providers.tf.
+# The bucket name must be the same across all stages (your Terraform state bucket).
+# The key is unique per stage — it's already set in each stage's providers.tf.
+#
+# Steps:
+#   1. Create an S3 bucket for Terraform state (or use an existing one)
+#   2. In each stage's providers.tf, replace "YOUR-STATE-BUCKET-NAME" with your bucket name
+#   3. Run `terraform init` in each stage directory
+#
+# Example backend block (already present in each stage):
+#
+#   backend "s3" {
+#     bucket       = "my-terraform-state-bucket"   # <- Your bucket name here
+#     key          = "vm-migration/STAGE/terraform.tfstate"
+#     region       = "us-east-1"
+#     encrypt      = true
+#     use_lockfile = true
+#   }
+#
+# State paths used by each stage:
+#
+#   Stage 01: vm-migration/aws-infra/terraform.tfstate
+#   Stage 02: vm-migration/vsphere-discovery/terraform.tfstate
+#   Stage 03: vm-migration/ovf-export/terraform.tfstate
+#   Stage 04: vm-migration/s3-upload/terraform.tfstate
+#   Stage 05: vm-migration/vm-import/terraform.tfstate
+#   Stage 06: vm-migration/ec2-launch/terraform.tfstate
