@@ -100,13 +100,15 @@ resource "aws_ssm_parameter" "lock_demo" {
 # ============================================================================
 # PART D: Cross-state dependency — read VPC info from lab1-networking state
 # ============================================================================
-# The data source below reads outputs from the lab1-networking remote state.
-# Pass the state bucket name and region as variables (set in terraform.tfvars
-# or via -var flags). This block becomes active once lab1-networking has been
-# applied at least once (so its outputs exist in remote state).
+# Both the data source and the app_config resource use `count` so they are
+# NO-OPS until the student sets `state_bucket_name` in terraform.tfvars
+# (Part C Step 19). During Part A this whole block is skipped — terraform
+# plan/apply succeeds without it.
 # ----------------------------------------------------------------------------
 
 data "terraform_remote_state" "networking" {
+  count = trimspace(var.state_bucket_name) == "" ? 0 : 1
+
   backend = "s3"
 
   config = {
@@ -117,17 +119,19 @@ data "terraform_remote_state" "networking" {
 }
 
 locals {
-  # Values from networking state
-  vpc_id            = data.terraform_remote_state.networking.outputs.vpc_id
-  subnet_id         = data.terraform_remote_state.networking.outputs.subnet_id
-  security_group_id = data.terraform_remote_state.networking.outputs.security_group_id
-
-  # Environment from workspace
-  environment = terraform.workspace
+  cross_state_enabled = length(data.terraform_remote_state.networking) > 0
+  vpc_id              = local.cross_state_enabled ? data.terraform_remote_state.networking[0].outputs.vpc_id : ""
+  subnet_id           = local.cross_state_enabled ? data.terraform_remote_state.networking[0].outputs.subnet_id : ""
+  security_group_id   = local.cross_state_enabled ? data.terraform_remote_state.networking[0].outputs.security_group_id : ""
+  environment         = terraform.workspace
 }
 
-# Application resource that uses networking outputs
+# Application resource that uses networking outputs. Gated on the cross-state
+# data source so Part A doesn't try to create this before lab1-networking
+# has been deployed.
 resource "aws_ssm_parameter" "app_config" {
+  count = local.cross_state_enabled ? 1 : 0
+
   name = "/${var.account}/${local.environment}/app-config"
   type = "String"
   value = jsonencode({
