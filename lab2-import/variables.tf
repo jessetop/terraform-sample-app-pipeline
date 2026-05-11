@@ -1,63 +1,74 @@
-# variables.tf
-# Input variables for Lab 2 import (simplified architecture)
+# lab2-import/variables.tf
 
-variable "student_id" {
-  description = "Your assigned student ID (e.g., student01)"
+variable "region" {
+  description = "AWS region. No default — set in terraform.tfvars to whatever your instructor assigned."
   type        = string
-
-  validation {
-    condition     = can(regex("^student[0-9]{2}$", var.student_id))
-    error_message = "Student ID must match the pattern 'studentXX' where XX is a two-digit number (e.g., student01)."
-  }
 }
 
-variable "state_bucket_name" {
-  description = "S3 bucket name from Lab 1 output (e.g., student01-terraform-state-abc123)"
+variable "account" {
+  description = "Your IAM user account name (e.g. user01). Used to prefix resource names. Same value as Day 1-2 var.account."
   type        = string
-
-  validation {
-    condition     = !can(regex("(SUFFIX|studentXX)", var.state_bucket_name))
-    error_message = "Replace placeholder with your actual bucket name from Lab 1 output (terraform output state_bucket_name)."
-  }
 }
 
-# =============================================================================
-# RESOURCE IDs FOR IMPORT (6 resources)
-# Get these from: cd ../lab2-legacy-setup && terraform output
-# =============================================================================
-
-# Network Layer
+# ---------------------------------------------------------------------------
+# Resource IDs students paste in from Day 1-2 (or from `lab2-day1-vpc-lean/`).
+# ---------------------------------------------------------------------------
 
 variable "vpc_id" {
-  description = "VPC ID (e.g., vpc-abc123)"
+  description = "ID of the existing VPC to import. Get from Day 1-2 deployment or `terraform output vpc_id` in lab2-day1-vpc-lean/."
   type        = string
 }
 
 variable "subnet_id" {
-  description = "Public subnet ID (e.g., subnet-abc123)"
+  description = "ID of the existing public subnet to import."
   type        = string
 }
 
 variable "internet_gateway_id" {
-  description = "Internet Gateway ID (e.g., igw-abc123)"
+  description = "ID of the existing internet gateway to import."
   type        = string
 }
 
 variable "route_table_id" {
-  description = "Route table ID (e.g., rtb-abc123)"
+  description = "ID of the existing public route table to import."
   type        = string
 }
 
-# Security Layer
+# Note: aws_route_table_association uses a COMPOUND ID for import:
+# `<subnet_id>/<route_table_id>`. We construct it from the two vars above.
 
 variable "security_group_id" {
-  description = "Security group ID (e.g., sg-abc123)"
+  description = "ID of the existing allow-http-ssh security group (e.g. sg-0abcdef...)."
   type        = string
 }
 
-# Compute Layer
-
-variable "instance_id" {
-  description = "EC2 instance ID (e.g., i-abc123)"
+variable "sg_rule_http_id" {
+  description = "ID of the HTTP ingress rule (sgr-...). Get from `aws ec2 describe-security-group-rules` or from outputs of lab2-day1-vpc-lean/."
   type        = string
+}
+
+variable "sg_rule_ssh_id" {
+  description = "ID of the SSH ingress rule (sgr-...)."
+  type        = string
+}
+
+variable "sg_rule_egress_id" {
+  description = "ID of the egress all-outbound rule (sgr-...)."
+  type        = string
+}
+
+# ---------------------------------------------------------------------------
+# Day 1-2 baseline values — defaults match what aws/vpc/terraform.tfvars uses
+# ---------------------------------------------------------------------------
+
+variable "vpc_cidr" {
+  description = "CIDR block of the VPC being imported. Must match reality."
+  type        = string
+  default     = "192.168.0.0/20"
+}
+
+variable "public_subnet_cidr" {
+  description = "CIDR block of the public subnet being imported."
+  type        = string
+  default     = "192.168.0.0/24"
 }

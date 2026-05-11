@@ -22,7 +22,7 @@ internet_gateway_id = "igw-REPLACE_ME"
 route_table_id      = "rtb-REPLACE_ME"
 
 # Security Layer
-security_group_id   = "sg-REPLACE_ME"
+security_group_id = "sg-REPLACE_ME"
 
 # Compute Layer
-instance_id         = "i-REPLACE_ME"
+instance_id = "i-REPLACE_ME"
