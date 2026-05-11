@@ -1,21 +1,30 @@
-# dashboard.tf - CloudWatch Dashboard for Terraform Operations Monitoring
+# lab4-observability/dashboard.tf  (LabForge patched version 2026-05-03)
 #
-# This dashboard provides at-a-glance visibility into:
-#   - CI/CD pipeline health (build duration, success/failure rates)
-#   - Pipeline execution status (succeeded vs. failed)
-#   - State backend operations (S3 reads/writes, DynamoDB lock activity)
-#   - Quick links to key AWS console pages
-#   - Audit query reference for the SOC team
+# Drop-in replacement for the original dashboard.tf in the
+# terraform-sample-app-pipeline repo. Two changes vs. the original:
+#
+#   1. S3 widget now uses var.state_bucket_name (which already exists in
+#      variables.tf) instead of the hard-coded "${var.account}-terraform-state"
+#      pattern. This makes the widget actually populate when the bucket has
+#      a random suffix (which Lab 1's bucket does).
+#
+#   2. The "DynamoDB Lock Operations" widget is replaced with an "S3 Lockfile
+#      PutObject" widget. Lab 1 uses Terraform 1.10+ S3 native locking
+#      (use_lockfile = true) — there is no DynamoDB table to monitor.
+#      Lockfile activity now shows up as PutObject calls on the state bucket
+#      with a key suffix of `.tflock`.
+#
+# Everything else (CodeBuild widgets, CodePipeline widgets, quick links,
+# audit query reference) is unchanged from the original.
 
 resource "aws_cloudwatch_dashboard" "terraform_ops" {
-  dashboard_name = "${var.student_id}-terraform-operations"
+  dashboard_name = "${var.account}-terraform-operations"
 
   dashboard_body = jsonencode({
     widgets = [
-
-      # ========================================================================
-      # ROW 0: Dashboard Title
-      # ========================================================================
+      # ---------------------------------------------------------------
+      # Header
+      # ---------------------------------------------------------------
       {
         type   = "text"
         x      = 0
@@ -23,274 +32,230 @@ resource "aws_cloudwatch_dashboard" "terraform_ops" {
         width  = 24
         height = 2
         properties = {
-          markdown = <<-EOF
-# Terraform Pipeline Operations Dashboard
-**Student:** ${var.student_id} | **Account:** NovaTech AWS | **Region:** us-east-1
-
-This dashboard provides operational visibility into Terraform CI/CD pipeline activity, state management operations, and deployment health. Use this for ongoing monitoring and SOC 2 audit evidence.
-EOF
+          markdown = "# Terraform Operations Dashboard — ${var.account}\n**Account:** **Region:** us-east-2 | **State bucket:** `${var.state_bucket_name}`\n\nMonitors CI/CD pipeline health, state operations, and provides audit query references."
         }
       },
 
-      # ========================================================================
-      # ROW 1: CodeBuild Metrics
-      # ========================================================================
-
-      # Widget: Build Duration (all 5 projects)
+      # ---------------------------------------------------------------
+      # Row 1: CI/CD Metrics
+      # ---------------------------------------------------------------
       {
         type   = "metric"
         x      = 0
         y      = 2
-        width  = 8
+        width  = 12
         height = 6
         properties = {
-          title   = "CodeBuild Duration (seconds)"
-          region  = "us-east-1"
+          metrics = [
+            ["AWS/CodeBuild", "Duration", "ProjectName", "${var.account}-terraform-validate"],
+            ["...", "${var.account}-terraform-plan-staging"],
+            ["...", "${var.account}-terraform-apply-staging"],
+            ["...", "${var.account}-terraform-plan-prod"],
+            ["...", "${var.account}-terraform-apply-prod"]
+          ]
           view    = "timeSeries"
           stacked = false
+          region  = "us-east-2"
+          title   = "CodeBuild Duration (seconds)"
           period  = 300
           stat    = "Average"
-          metrics = [
-            ["AWS/CodeBuild", "Duration", "ProjectName", "${var.student_id}-terraform-validate", { label = "Validate" }],
-            ["AWS/CodeBuild", "Duration", "ProjectName", "${var.student_id}-terraform-plan-staging", { label = "Plan Staging" }],
-            ["AWS/CodeBuild", "Duration", "ProjectName", "${var.student_id}-terraform-apply-staging", { label = "Apply Staging" }],
-            ["AWS/CodeBuild", "Duration", "ProjectName", "${var.student_id}-terraform-plan-prod", { label = "Plan Prod" }],
-            ["AWS/CodeBuild", "Duration", "ProjectName", "${var.student_id}-terraform-apply-prod", { label = "Apply Prod" }]
-          ]
         }
       },
 
-      # Widget: Build Success vs Failure (staging and prod apply projects)
+      {
+        type   = "metric"
+        x      = 12
+        y      = 2
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["AWS/CodeBuild", "SucceededBuilds", "ProjectName", "${var.account}-terraform-apply-staging"],
+            [".", "FailedBuilds", ".", "."],
+            [".", "SucceededBuilds", ".", "${var.account}-terraform-apply-prod"],
+            [".", "FailedBuilds", ".", "."]
+          ]
+          view    = "timeSeries"
+          stacked = false
+          region  = "us-east-2"
+          title   = "Build Success vs. Failure (Apply stages)"
+          period  = 3600
+          stat    = "Sum"
+        }
+      },
+
+      {
+        type   = "metric"
+        x      = 0
+        y      = 8
+        width  = 8
+        height = 4
+        properties = {
+          metrics = [
+            ["AWS/CodePipeline", "PipelineExecutionSucceeded", "PipelineName", "${var.account}-terraform-pipeline"]
+          ]
+          view   = "singleValue"
+          region = "us-east-2" # change to your assigned region if not us-east-2
+          title  = "Pipeline Successes"
+          period = 86400
+          stat   = "Sum"
+        }
+      },
+
       {
         type   = "metric"
         x      = 8
-        y      = 2
+        y      = 8
         width  = 8
-        height = 6
+        height = 4
         properties = {
-          title   = "Build Success vs Failure"
-          region  = "us-east-1"
-          view    = "timeSeries"
-          stacked = false
-          period  = 3600
-          stat    = "Sum"
           metrics = [
-            ["AWS/CodeBuild", "SucceededBuilds", "ProjectName", "${var.student_id}-terraform-apply-staging", { label = "Staging Succeeded", color = "#2ca02c" }],
-            ["AWS/CodeBuild", "FailedBuilds", "ProjectName", "${var.student_id}-terraform-apply-staging", { label = "Staging Failed", color = "#d62728" }],
-            ["AWS/CodeBuild", "SucceededBuilds", "ProjectName", "${var.student_id}-terraform-apply-prod", { label = "Prod Succeeded", color = "#1f77b4" }],
-            ["AWS/CodeBuild", "FailedBuilds", "ProjectName", "${var.student_id}-terraform-apply-prod", { label = "Prod Failed", color = "#ff7f0e" }]
+            ["AWS/CodePipeline", "PipelineExecutionFailed", "PipelineName", "${var.account}-terraform-pipeline"]
           ]
+          view   = "singleValue"
+          region = "us-east-2" # change to your assigned region if not us-east-2
+          title  = "Pipeline Failures"
+          period = 86400
+          stat   = "Sum"
         }
       },
 
-      # Widget: Pipeline Execution Counts (single value)
       {
         type   = "metric"
         x      = 16
-        y      = 2
-        width  = 4
-        height = 3
-        properties = {
-          title   = "Pipeline Succeeded"
-          region  = "us-east-1"
-          view    = "singleValue"
-          period  = 86400
-          stat    = "Sum"
-          metrics = [
-            ["AWS/CodePipeline", "PipelineExecutionSucceeded", "PipelineName", "${var.student_id}-terraform-pipeline", { label = "Succeeded", color = "#2ca02c" }]
-          ]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 20
-        y      = 2
-        width  = 4
-        height = 3
-        properties = {
-          title   = "Pipeline Failed"
-          region  = "us-east-1"
-          view    = "singleValue"
-          period  = 86400
-          stat    = "Sum"
-          metrics = [
-            ["AWS/CodePipeline", "PipelineExecutionFailed", "PipelineName", "${var.student_id}-terraform-pipeline", { label = "Failed", color = "#d62728" }]
-          ]
-        }
-      },
-
-      # Widget: Pipeline Execution Time Series
-      {
-        type   = "metric"
-        x      = 16
-        y      = 5
+        y      = 8
         width  = 8
-        height = 3
+        height = 4
         properties = {
-          title   = "Pipeline Executions Over Time"
-          region  = "us-east-1"
+          metrics = [
+            ["AWS/CodePipeline", "PipelineExecutionSucceeded", "PipelineName", "${var.account}-terraform-pipeline", { stat = "Sum" }],
+            [".", "PipelineExecutionFailed", ".", ".", { stat = "Sum" }]
+          ]
           view    = "timeSeries"
           stacked = true
+          region  = "us-east-2"
+          title   = "Pipeline Executions Over Time"
           period  = 3600
-          stat    = "Sum"
-          metrics = [
-            ["AWS/CodePipeline", "PipelineExecutionSucceeded", "PipelineName", "${var.student_id}-terraform-pipeline", { label = "Succeeded", color = "#2ca02c" }],
-            ["AWS/CodePipeline", "PipelineExecutionFailed", "PipelineName", "${var.student_id}-terraform-pipeline", { label = "Failed", color = "#d62728" }]
-          ]
         }
       },
 
-      # ========================================================================
-      # ROW 2: State & Infrastructure Operations
-      # ========================================================================
-
-      # Section Header
-      {
-        type   = "text"
-        x      = 0
-        y      = 8
-        width  = 24
-        height = 1
-        properties = {
-          markdown = "## State & Infrastructure Operations"
-        }
-      },
-
-      # Widget: S3 State Bucket Operations
+      # ---------------------------------------------------------------
+      # Row 2: State & Infrastructure Operations
+      # ---------------------------------------------------------------
+      #
+      # NOTE (LabForge patch): BucketName is var.state_bucket_name (the actual
+      # bucket name with random suffix), NOT a constructed string.
       {
         type   = "metric"
         x      = 0
-        y      = 9
+        y      = 12
         width  = 12
         height = 6
         properties = {
-          title   = "State Bucket Operations (S3)"
-          region  = "us-east-1"
+          metrics = [
+            ["AWS/S3", "GetRequests", "BucketName", var.state_bucket_name, "FilterId", "EntireBucket"],
+            [".", "PutRequests", ".", ".", ".", "."]
+          ]
           view    = "timeSeries"
           stacked = false
+          region  = "us-east-2"
+          title   = "State Bucket Operations (Get = plan, Put = apply)"
           period  = 300
           stat    = "Sum"
-          metrics = [
-            ["AWS/S3", "GetRequests", "BucketName", "${var.student_id}-terraform-state", "FilterId", "EntireBucket", { label = "Get Requests (Read State)", color = "#1f77b4" }],
-            ["AWS/S3", "PutRequests", "BucketName", "${var.student_id}-terraform-state", "FilterId", "EntireBucket", { label = "Put Requests (Write State)", color = "#ff7f0e" }]
-          ]
         }
       },
 
-      # Widget: DynamoDB Lock Operations
+      # PATCHED: was DynamoDB lock; now S3 lockfile PutObject activity.
+      # Requires the bucket to have a request metrics filter on prefix .tflock —
+      # see Appendix A of Lab 4 for the patch to lab1-state-infra/main.tf.
       {
         type   = "metric"
         x      = 12
-        y      = 9
+        y      = 12
         width  = 12
         height = 6
         properties = {
-          title   = "State Lock Operations (DynamoDB)"
-          region  = "us-east-1"
+          metrics = [
+            ["AWS/S3", "PutRequests", "BucketName", var.state_bucket_name, "FilterId", "lockfile-activity"]
+          ]
           view    = "timeSeries"
           stacked = false
+          region  = "us-east-2"
+          title   = "State Lockfile Activity (S3 native locking — Terraform 1.10+)"
           period  = 300
           stat    = "Sum"
-          metrics = [
-            ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${var.student_id}-terraform-lock", { label = "Lock Reads (Check/Acquire)", color = "#2ca02c" }],
-            ["AWS/DynamoDB", "ConsumedWriteCapacityUnits", "TableName", "${var.student_id}-terraform-lock", { label = "Lock Writes (Acquire/Release)", color = "#9467bd" }]
-          ]
         }
       },
 
-      # ========================================================================
-      # ROW 3: Quick Links & Audit Reference
-      # ========================================================================
-
-      # Section Header
+      # ---------------------------------------------------------------
+      # Row 3: Reference Panels
+      # ---------------------------------------------------------------
       {
         type   = "text"
         x      = 0
-        y      = 15
-        width  = 24
-        height = 1
-        properties = {
-          markdown = "## Quick Links & Audit Reference"
-        }
-      },
-
-      # Widget: Quick Links Panel
-      {
-        type   = "text"
-        x      = 0
-        y      = 16
+        y      = 18
         width  = 12
-        height = 5
+        height = 6
         properties = {
-          markdown = <<-EOF
-### Console Quick Links
+          markdown = <<-EOT
+            ## Quick Links
 
-| Resource | Link |
-|----------|------|
-| **CodePipeline** | [View Pipeline](https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${var.student_id}-terraform-pipeline/view?region=us-east-1) |
-| **CodeBuild** | [Build Projects](https://console.aws.amazon.com/codesuite/codebuild/projects?region=us-east-1) |
-| **CloudTrail** | [Event History](https://console.aws.amazon.com/cloudtrail/home?region=us-east-1#/events) |
-| **S3 State Bucket** | [View Bucket](https://console.aws.amazon.com/s3/buckets/${var.student_id}-terraform-state?region=us-east-1) |
-| **DynamoDB Lock Table** | [View Table](https://console.aws.amazon.com/dynamodbv2/home?region=us-east-1#table?name=${var.student_id}-terraform-lock) |
-| **CloudWatch Logs Insights** | [Run Queries](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:logs-insights) |
-EOF
+            - [CodePipeline → ${var.account}-terraform-pipeline](https://us-east-2.console.aws.amazon.com/codesuite/codepipeline/pipelines/${var.account}-terraform-pipeline/view)
+            - [CodeBuild Projects](https://us-east-2.console.aws.amazon.com/codesuite/codebuild/projects)
+            - [CloudTrail Event History](https://us-east-2.console.aws.amazon.com/cloudtrail/home#/events)
+            - [State Bucket](https://us-east-2.console.aws.amazon.com/s3/buckets/${var.state_bucket_name})
+            - [Logs Insights](https://us-east-2.console.aws.amazon.com/cloudwatch/home#logsV2:logs-insights)
+          EOT
         }
       },
 
-      # Widget: Audit Query Reference Panel
       {
         type   = "text"
         x      = 12
-        y      = 16
+        y      = 18
         width  = 12
-        height = 5
+        height = 6
         properties = {
-          markdown = <<-EOF
-### CloudTrail Audit Queries (Log Insights)
+          markdown = <<-EOT
+            ## Audit Query Reference
 
-**All Terraform Activity:**
-```
-fields @timestamp, eventName, userIdentity.arn
-| filter userAgent like /Terraform/
-| sort @timestamp desc | limit 50
-```
+            Run these in CloudWatch Logs Insights against your CloudTrail log group.
 
-**SSM Parameter Changes by Student:**
-```
-fields @timestamp, eventName, requestParameters.name
-| filter eventSource = "ssm.amazonaws.com"
-| filter requestParameters.name like /studentXX/
-| sort @timestamp desc | limit 20
-```
+            **All Terraform activity (last 12 hours)**
+            ```
+            fields @timestamp, eventName, userIdentity.arn, sourceIPAddress
+            | filter userAgent like /Terraform/
+            | sort @timestamp desc | limit 50
+            ```
 
-**Pipeline vs Manual Activity:**
-```
-fields @timestamp, eventName, sourceIPAddress
-| filter userAgent like /Terraform/
-| filter sourceIPAddress = "codebuild.amazonaws.com"
-| sort @timestamp desc | limit 50
-```
+            **SSM parameter changes for ${var.account}**
+            ```
+            fields @timestamp, eventName, requestParameters.name
+            | filter eventSource = "ssm.amazonaws.com"
+            | filter eventName in ["PutParameter","DeleteParameter"]
+            | filter requestParameters.name like /${var.account}/
+            | sort @timestamp desc | limit 20
+            ```
 
-*In CloudTrail Event History, filter by:*
-- **User name:** `${var.student_id}-codebuild-terraform-role`
-- **Event source:** `ssm.amazonaws.com`, `ec2.amazonaws.com`
-EOF
+            **Pipeline vs. manual changes**
+            ```
+            fields @timestamp, eventName, userIdentity.arn, sourceIPAddress
+            | filter userIdentity.arn like /${var.account}-codebuild-terraform-role/
+            | sort @timestamp desc | limit 50
+            ```
+          EOT
         }
       }
     ]
   })
 }
 
-# ============================================================================
-# Outputs
-# ============================================================================
-
 output "dashboard_url" {
-  description = "URL to the CloudWatch dashboard in the AWS Console"
-  value       = "https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=${var.student_id}-terraform-operations"
+  description = "Direct URL to view this dashboard in the CloudWatch console."
+  value       = "https://us-east-2.console.aws.amazon.com/cloudwatch/home?region=us-east-2#dashboards:name=${aws_cloudwatch_dashboard.terraform_ops.dashboard_name}"
 }
 
 output "dashboard_name" {
-  description = "Name of the deployed CloudWatch dashboard"
+  description = "Name of the dashboard resource (useful for cross-referencing)."
   value       = aws_cloudwatch_dashboard.terraform_ops.dashboard_name
 }
