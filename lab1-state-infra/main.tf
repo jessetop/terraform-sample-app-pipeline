@@ -96,3 +96,55 @@ resource "aws_ssm_parameter" "lock_demo" {
     ignore_changes = [value]
   }
 }
+
+# ============================================================================
+# PART D: Cross-state dependency — read VPC info from lab1-networking state
+# ============================================================================
+# The data source below reads outputs from the lab1-networking remote state.
+# Pass the state bucket name and region as variables (set in terraform.tfvars
+# or via -var flags). This block becomes active once lab1-networking has been
+# applied at least once (so its outputs exist in remote state).
+# ----------------------------------------------------------------------------
+
+data "terraform_remote_state" "networking" {
+  backend = "s3"
+
+  config = {
+    bucket = var.state_bucket_name
+    key    = "networking/terraform.tfstate"
+    region = var.region
+  }
+}
+
+locals {
+  # Values from networking state
+  vpc_id            = data.terraform_remote_state.networking.outputs.vpc_id
+  subnet_id         = data.terraform_remote_state.networking.outputs.subnet_id
+  security_group_id = data.terraform_remote_state.networking.outputs.security_group_id
+
+  # Environment from workspace
+  environment = terraform.workspace
+}
+
+# Application resource that uses networking outputs
+resource "aws_ssm_parameter" "app_config" {
+  name = "/${var.account}/${local.environment}/app-config"
+  type = "String"
+  value = jsonencode({
+    environment       = local.environment
+    vpc_id            = local.vpc_id
+    subnet_id         = local.subnet_id
+    security_group_id = local.security_group_id
+    deployed_at       = timestamp()
+  })
+
+  tags = {
+    Environment = local.environment
+    ManagedBy   = "terraform"
+    Workspace   = terraform.workspace
+  }
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
