@@ -33,36 +33,38 @@ resource "null_resource" "ovf_export" {
   }
 
   provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
     command = <<-EOT
-      set -e
+      $ErrorActionPreference = "Stop"
 
-      echo "=============================================="
-      echo "Exporting VM: ${local.vm_name}"
-      echo "From ESXi host: ${local.esxi_host}"
-      echo "=============================================="
+      Write-Host "=============================================="
+      Write-Host "Exporting VM: ${local.vm_name}"
+      Write-Host "From ESXi host: ${local.esxi_host}"
+      Write-Host "=============================================="
 
       # Check ovftool is installed
-      if ! command -v ovftool &> /dev/null; then
-        echo "ERROR: ovftool not found in PATH"
-        echo "Download from: https://developer.vmware.com/web/tool/ovf/"
+      if (-not (Get-Command ovftool -ErrorAction SilentlyContinue)) {
+        Write-Error "ERROR: ovftool not found in PATH"
+        Write-Host "Download from: https://developer.vmware.com/web/tool/ovf/"
         exit 1
-      fi
+      }
 
       ovftool --version
 
       # Create output directory
-      mkdir -p "${var.export_dir}"
+      New-Item -ItemType Directory -Force -Path "${var.export_dir}" | Out-Null
 
       # Export VM to OVA (VM should be powered off for clean export)
-      ovftool \
-        --noSSLVerify \
-        --diskMode=thin \
-        "vi://${var.esxi_username}:${var.esxi_password}@${local.esxi_host}/${local.vm_name}" \
-        "${local.ova_path}"
+      ovftool --noSSLVerify --diskMode=thin "vi://${var.esxi_username}:${var.esxi_password}@${local.esxi_host}/${local.vm_name}" "${local.ova_path}"
 
-      echo ""
-      echo "Export complete: ${local.ova_path}"
-      ls -lh "${local.ova_path}"
+      if ($LASTEXITCODE -ne 0) {
+        Write-Error "ovftool export failed with exit code $LASTEXITCODE"
+        exit $LASTEXITCODE
+      }
+
+      Write-Host ""
+      Write-Host "Export complete: ${local.ova_path}"
+      Get-Item "${local.ova_path}" | Select-Object Name, Length
     EOT
   }
 }

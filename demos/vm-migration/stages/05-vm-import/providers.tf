@@ -4,7 +4,7 @@ terraform {
   required_version = ">= 1.5.0"
 
   backend "s3" {
-    bucket       = "YOUR-STATE-BUCKET-NAME"  # <- Replace with your S3 state bucket
+    bucket       = "student02-terraform-state-jiyphf"  # <- Replace with your S3 state bucket
     key          = "vm-migration/vm-import/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true
